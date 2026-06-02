@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ResourceTracker</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--sb:200px;--acc:#0071e3;--acc-l:#e8f1fb;--r:12px;--rs:8px;--rx:6px;--bg:#f5f5f7;--surf:#ffffff;--surf2:#f5f5f7;--bdr:rgba(0,0,0,0.1);--bdr2:rgba(0,0,0,0.18);--txt:#1d1d1f;--txt2:#6e6e73;--txt3:#aeaeb2}
+@media(prefers-color-scheme:dark){:root{--bg:#1c1c1e;--surf:#2c2c2e;--surf2:#3a3a3c;--bdr:rgba(255,255,255,0.1);--bdr2:rgba(255,255,255,0.18);--txt:#f5f5f7;--txt2:#aeaeb2;--txt3:#6e6e73;--acc:#2997ff;--acc-l:#1a3a5c}}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif;background:var(--bg);color:var(--txt);font-size:13px;-webkit-font-smoothing:antialiased}
+
+/* ── Loading / Setup screens ── */
+.screen{display:none;position:fixed;inset:0;background:var(--bg);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.screen.show{display:flex}
+.spin{width:28px;height:28px;border:2px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.setup-box{background:var(--surf);border:0.5px solid var(--bdr);border-radius:20px;padding:32px;width:420px;max-width:calc(100vw - 40px)}
+.setup-ttl{font-size:18px;font-weight:700;letter-spacing:-0.4px;margin-bottom:4px}
+.setup-sub{font-size:12px;color:var(--txt2);margin-bottom:20px;line-height:1.5}
+.setup-step{background:var(--surf2);border-radius:var(--rs);padding:12px 14px;margin-bottom:10px;font-size:12px;line-height:1.6}
+.setup-step code{background:var(--bdr);padding:1px 5px;border-radius:4px;font-size:11px;font-family:monospace}
+.setup-inp{margin-top:14px}
+.setup-inp label{font-size:11px;color:var(--txt2);display:block;margin-bottom:5px}
+.err{font-size:11px;color:#A32D2D;margin-top:6px;display:none}
+.err.show{display:block}
+
+/* ── App shell ── */
+.app{display:flex;min-height:100vh}
+.sidebar{width:var(--sb);background:var(--surf);border-right:0.5px solid var(--bdr);display:flex;flex-direction:column;transition:width .2s;position:sticky;top:0;height:100vh;overflow:hidden}
+.sidebar.col{width:44px}
+.sb-brand{padding:14px 16px 10px;font-size:15px;font-weight:700;letter-spacing:-0.4px;border-bottom:0.5px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;white-space:nowrap;overflow:hidden}
+.sb-brand span{color:var(--txt2);font-weight:400}
+.col .sb-bt,.col .nl,.col .nb-txt{display:none}
+.sb-tog{background:none;border:none;cursor:pointer;color:var(--txt2);padding:2px;flex-shrink:0;font-size:16px}
+.ng{padding:4px 0}
+.nl{font-size:10px;color:var(--txt3);padding:6px 16px 2px;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.nb{display:flex;align-items:center;gap:8px;width:100%;padding:7px 14px;background:none;border:none;color:var(--txt2);font-size:12px;cursor:pointer;transition:all .12s;text-align:left;font-family:inherit;white-space:nowrap;overflow:hidden}
+.nb:hover{color:var(--txt);background:var(--surf2)}
+.nb.active{color:var(--acc);background:var(--acc-l);font-weight:500}
+.nb i{font-size:15px;width:16px;flex-shrink:0}
+.col .nb{padding:10px 14px;justify-content:center}
+.sb-foot{margin-top:auto;padding:12px 14px;border-top:0.5px solid var(--bdr);position:relative}
+.col .sb-fi{display:none}
+.u-chip{display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 2px;border-radius:var(--rx);transition:background .1s}
+.u-chip:hover{background:var(--surf2)}
+.u-nm{font-size:12px;font-weight:500}.u-rl{font-size:11px;color:var(--txt2)}
+.sw-wrap{position:absolute;bottom:58px;left:6px;right:6px;background:var(--surf);border:0.5px solid var(--bdr2);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.14);z-index:60;display:none;overflow:hidden;max-height:280px;overflow-y:auto}
+.sw-wrap.open{display:block}
+.sw-item{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;transition:background .1s;font-size:12px}
+.sw-item:hover{background:var(--surf2)}
+.sw-item.active{background:var(--acc-l)}
+.sw-nm{font-size:12px;font-weight:500}.sw-rl{font-size:10px;color:var(--txt2)}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#639922;margin-left:auto;flex-shrink:0;transition:background .3s}
+.sync-dot.err{background:#E24B4A}
+.sync-dot.loading{background:#EF9F27;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow-y:auto}
+.topbar{padding:12px 20px;border-bottom:0.5px solid var(--bdr);background:var(--surf);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+.tb-title{font-size:15px;font-weight:600;letter-spacing:-0.3px}
+.content{padding:18px 20px}
+.page{display:none}.page.active{display:block}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.mc{background:var(--surf2);border-radius:var(--rs);padding:13px}
+.mc-lbl{font-size:11px;color:var(--txt2);margin-bottom:4px}
+.mc-val{font-size:21px;font-weight:600;letter-spacing:-0.5px;line-height:1}
+.mc-sub{font-size:11px;color:var(--txt2);margin-top:3px}
+.surf{background:var(--surf);border:0.5px solid var(--bdr);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:6px}
+.st{font-size:13px;font-weight:500}
+.seg{display:inline-flex;background:var(--surf2);border-radius:var(--rs);padding:2px}
+.sg{padding:4px 10px;border-radius:6px;font-size:11px;border:none;background:none;color:var(--txt2);cursor:pointer;font-family:inherit;transition:all .12s}
+.sg.active{background:var(--surf);color:var(--txt);font-weight:500;border:0.5px solid var(--bdr)}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+.tbl th{text-align:left;padding:5px 8px;font-weight:500;font-size:11px;color:var(--txt2);border-bottom:0.5px solid var(--bdr)}
+.tbl td{padding:8px 8px;border-bottom:0.5px solid var(--bdr);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbl tr:last-child td{border:none}
+.tbl tbody tr:hover td{background:var(--surf2)}
+.pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500}
+.pg{background:#EAF3DE;color:#3B6D11}.pa{background:#FAEEDA;color:#854F0B}.pr{background:#FCEBEB;color:#A32D2D}.pb{background:#E6F1FB;color:#0C447C}.pgr{background:#F1EFE8;color:#5F5E5A}
+.ubar{height:4px;border-radius:2px;background:var(--bdr);overflow:hidden;min-width:50px}
+.uf{height:100%;border-radius:2px}.ug{background:#639922}.ua{background:#EF9F27}.ur2{background:#E24B4A}
+.av{border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0}
+.avs{width:24px;height:24px;font-size:9px}.avm{width:30px;height:30px;font-size:11px}
+.c0{background:#E1F5EE;color:#0F6E56}.c1{background:#E6F1FB;color:#185FA5}.c2{background:#EEEDFE;color:#534AB7}.c3{background:#FAECE7;color:#993C1D}.c4{background:#FAEEDA;color:#854F0B}.c5{background:#EAF3DE;color:#3B6D11}.c6{background:#FBEAF0;color:#993556}.c7{background:#E1F5EE;color:#085041}.c8{background:#E6F1FB;color:#0C447C}.c9{background:#EEEDFE;color:#3C3489}
+.tr-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid var(--bdr)}
+.tr-row:last-child{border:none}
+.tr-info{flex:1;min-width:0}
+.tr-proj{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-code{font-size:11px;color:var(--txt2);margin-top:1px}
+.tr-time{font-family:'SF Mono','Courier New',monospace;font-size:16px;font-weight:500;min-width:72px;text-align:center;letter-spacing:.5px}
+.tr-acts{display:flex;gap:4px;margin-left:8px}
+.ib{width:28px;height:28px;border-radius:50%;border:0.5px solid var(--bdr2);background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--txt2);transition:all .12s;font-size:13px}
+.ib:hover{background:var(--surf2);color:var(--txt)}
+.ib.run{background:var(--acc-l);border-color:var(--acc);color:var(--acc)}
+.notif{display:none;background:var(--acc-l);border:0.5px solid var(--acc);border-radius:var(--r);padding:12px 14px;margin-bottom:12px;align-items:flex-start;gap:10px}
+.notif.show{display:flex}
+.modal-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;padding:20px}
+.modal-wrap.open{display:flex}
+.modal{background:var(--surf);border-radius:var(--r);border:0.5px solid var(--bdr);padding:20px;width:480px;max-width:100%;max-height:90vh;overflow-y:auto}
+.mh{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.mt{font-size:13px;font-weight:600}
+.fg{margin-bottom:12px}
+.fg label{font-size:11px;color:var(--txt2);display:block;margin-bottom:4px}
+input,select,textarea{width:100%;padding:8px 10px;border:0.5px solid var(--bdr2);border-radius:var(--rx);background:var(--surf);color:var(--txt);font-size:12px;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc)}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.br{display:flex;justify-content:flex-end;gap:7px;margin-top:8px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--rx);border:0.5px solid var(--bdr2);background:transparent;color:var(--txt);font-size:12px;cursor:pointer;font-family:inherit;transition:all .12s}
+.btn:hover{background:var(--surf2)}
+.bta{background:var(--acc);color:#fff;border-color:var(--acc)}
+.bta:hover{opacity:.88}
+.bts{padding:4px 9px;font-size:11px}
+.vp{color:#3B6D11;font-weight:500}.vn{color:#A32D2D;font-weight:500}
+.fc-outer{overflow-x:auto}
+.fc-tbl{border-collapse:collapse;font-size:11px;width:max-content;min-width:100%}
+.fc-tbl th{padding:5px 8px;font-weight:500;color:var(--txt2);border-bottom:0.5px solid var(--bdr);white-space:nowrap;text-align:center;min-width:66px}
+.fc-tbl th.nc{text-align:left;min-width:140px;position:sticky;left:0;background:var(--surf);z-index:2}
+.fc-tbl td{padding:3px 4px;border-bottom:0.5px solid var(--bdr)}
+.fc-tbl td.nc{position:sticky;left:0;background:var(--surf);z-index:1;padding:5px 8px}
+.fc-tbl tr:last-child td{border:none}
+.fc-tbl .mr td{background:var(--surf2);font-weight:500}
+.fc-tbl .mr td.nc{background:var(--surf2)}
+.fc-inp{border:0.5px solid transparent;border-radius:4px;background:transparent;text-align:center;padding:3px;width:52px;font-size:11px;color:var(--txt);font-family:inherit}
+.fc-inp:focus{outline:none;border-color:var(--acc);background:var(--acc-l)}
+.fc-sum{font-size:10px;text-align:center;padding:4px 6px}
+.lv-cell{width:20px;height:20px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;cursor:pointer;border:0.5px solid var(--bdr);background:var(--surf2);transition:all .1s;user-select:none}
+.lv-cell.lv{background:#FAEEDA;border-color:#EF9F27;color:#854F0B;font-weight:600}
+.toast{display:none;background:var(--txt);color:var(--surf);padding:8px 14px;border-radius:var(--rs);font-size:12px;font-weight:500;position:fixed;bottom:20px;right:20px;z-index:300;align-items:center;gap:6px}
+.toast.show{display:flex}
+.ch{height:130px;margin-top:4px}
+.bc{display:flex;align-items:flex-end;gap:3px;height:100%;padding-bottom:18px}
+.bc-col{display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;height:100%}
+.bc-in{width:100%;display:flex;flex-direction:column;justify-content:flex-end;flex:1}
+.bc-fill{width:100%;border-radius:3px 3px 0 0;min-height:2px;transition:height .3s}
+.bc-lbl{font-size:9px;color:var(--txt2);margin-top:3px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.bc-val{font-size:9px;color:var(--txt2);margin-bottom:2px;text-align:center}
+.bb{height:5px;border-radius:3px;background:var(--bdr);overflow:hidden;margin-top:3px}
+.bb-f{height:100%;border-radius:3px;background:var(--acc)}
+.ar{padding:7px 0;border-bottom:0.5px solid var(--bdr);font-size:11px}
+.ar:last-child{border:none}
+.es{text-align:center;padding:28px 20px;color:var(--txt2);font-size:12px}
+.tag{display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:500;margin-left:3px}
+.tag-a{background:#EAF3DE;color:#3B6D11}.tag-f{background:#E6F1FB;color:#0C447C}
+.lm-warn{font-size:11px;color:var(--txt2);background:var(--surf2);padding:8px 10px;border-radius:var(--rx);margin-bottom:12px;display:none}
+.info-bar{font-size:11px;color:var(--txt2);background:var(--surf2);border:0.5px solid var(--bdr);border-radius:var(--rx);padding:8px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+
+<!-- Loading screen -->
+<div class="screen show" id="scr-load">
+  <div class="spin"></div>
+  <div style="font-size:12px;color:var(--txt2)" id="load-msg">Connecting…</div>
+</div>
+
+<!-- App shell -->
+<div class="app" id="shell" style="display:none">
+  <nav class="sidebar" id="sb">
+    <div class="sb-brand">
+      <span class="sb-bt">Resource<span style="font-weight:400">Tracker</span></span>
+      <button class="sb-tog" onclick="toggleSB()"><i class="ti ti-layout-sidebar-left-collapse"></i></button>
+    </div>
+    <div class="ng">
+      <div class="nl">Overview</div>
+      <button class="nb active" onclick="nav('dashboard',this)"><i class="ti ti-layout-dashboard"></i><span class="nb-txt">Dashboard</span></button>
+      <button class="nb" onclick="nav('today',this)"><i class="ti ti-clock"></i><span class="nb-txt">Today</span></button>
+      <button class="nb" onclick="nav('forecast',this)"><i class="ti ti-calendar-stats"></i><span class="nb-txt">Forecast</span></button>
+    </div>
+    <div class="ng">
+      <div class="nl">Team</div>
+      <button class="nb" onclick="nav('timesheets',this)"><i class="ti ti-table"></i><span class="nb-txt">All timesheets</span></button>
+      <button class="nb" onclick="nav('leave',this)"><i class="ti ti-beach"></i><span class="nb-txt">Leave planner</span></button>
+      <button class="nb" onclick="nav('audit',this)"><i class="ti ti-history"></i><span class="nb-txt">Audit log</span></button>
+    </div>
+    <div class="ng" id="adm-nav" style="display:none">
+      <div class="nl">Admin</div>
+      <button class="nb" onclick="nav('projects',this)"><i class="ti ti-briefcase"></i><span class="nb-txt">Projects</span></button>
+      <button class="nb" onclick="nav('team',this)"><i class="ti ti-users"></i><span class="nb-txt">Team</span></button>
+    </div>
+    <div class="sb-foot">
+      <div class="sw-wrap" id="sw-wrap"></div>
+      <div class="u-chip" onclick="toggleSwitcher()">
+        <div class="av avm" id="sb-av"></div>
+        <div class="sb-fi">
+          <div class="u-nm" id="sb-nm"></div>
+          <div class="u-rl" id="sb-rl"></div>
+        </div>
+        <div class="sync-dot loading" id="sync-dot" title="Sync status" style="margin-left:auto"></div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="tb-title" id="pg-title">Dashboard</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="font-size:11px;color:var(--txt2)" id="tb-date"></div>
+        <button class="btn bts bta" onclick="openModal('pm')"><i class="ti ti-plus"></i>New project</button>
+      </div>
+    </div>
+    <div class="content">
+
+      <div id="page-dashboard" class="page active">
+        <div class="metrics" id="dm"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <div class="seg" id="d-seg"></div>
+          <div style="font-size:11px;color:var(--txt2)" id="d-lbl"></div>
+        </div>
+        <div class="surf"><div class="sh"><div class="st">Team utilisation — current week</div></div><div class="ch" id="util-ch"></div></div>
+        <div class="surf">
+          <div class="sh"><div class="st">Member breakdown</div></div>
+          <table class="tbl" style="table-layout:fixed">
+            <colgroup><col style="width:120px"><col style="width:70px"><col style="width:65px"><col style="width:95px"><col style="width:85px"><col style="width:95px"></colgroup>
+            <thead><tr><th>Member</th><th>Allocated</th><th>Capacity</th><th>Utilisation</th><th>vs Next wk</th><th>Status</th></tr></thead>
+            <tbody id="d-tbody"></tbody>
+          </table>
+        </div>
+        <div class="surf">
+          <div class="sh"><div class="st">Project hours burn</div></div>
+          <table class="tbl" style="table-layout:fixed">
+            <colgroup><col style="width:130px"><col style="width:60px"><col style="width:70px"><col style="width:65px"><col style="width:120px"><col style="width:50px"></colgroup>
+            <thead><tr><th>Project</th><th>Status</th><th>Logged</th><th>Budget</th><th>Burn</th><th>%</th></tr></thead>
+            <tbody id="burn-tbody"></tbody>
+          </table>
+        </div>
+        <div class="surf"><div class="sh"><div class="st" id="gap-ttl">Capacity gaps</div></div><div id="gap-cont"></div></div>
+      </div>
+
+      <div id="page-today" class="page">
+        <div class="metrics" id="tm"></div>
+        <div class="notif" id="notif">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--acc);flex-shrink:0;margin-top:3px"></div>
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:500" id="notif-ttl"></div>
+            <div style="font-size:11px;color:var(--txt2);margin:2px 0 8px" id="notif-msg"></div>
+            <div style="display:flex;gap:6px"><button class="btn bts bta" onclick="continueTimer()">Continue</button><button class="btn bts" onclick="stopActiveTimer()">Stop timer</button><button class="btn bts" onclick="dismissNotif()">Dismiss</button></div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--txt2);margin-bottom:8px"><kbd style="background:var(--surf2);border:0.5px solid var(--bdr2);border-radius:3px;padding:1px 5px;font-family:monospace;font-size:10px">Space</kbd> to start/pause active timer</div>
+        <div class="surf">
+          <div class="sh"><div class="st">Active timers</div><button class="btn bts" onclick="openLogModal(0)"><i class="ti ti-edit"></i>Manual log</button></div>
+          <div id="timer-list"></div>
+        </div>
+        <div class="surf">
+          <div class="sh"><div class="st">Today's log</div><div style="font-size:11px;color:var(--txt2)"><span class="tag tag-a">Actual</span> logged &nbsp;<span class="tag tag-f">Forecast</span> planned</div></div>
+          <table class="tbl" style="table-layout:fixed">
+            <colgroup><col style="width:115px"><col style="width:58px"><col style="width:60px"><col style="width:60px"><col style="width:60px"><col style="width:42px"><col style="width:95px"><col style="width:36px"></colgroup>
+            <thead><tr><th>Project</th><th>Code</th><th>Timer hrs</th><th>Manual hrs</th><th>Total actual</th><th>Day</th><th>Notes</th><th></th></tr></thead>
+            <tbody id="today-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="page-forecast" class="page">
+        <div class="surf">
+          <div class="sh">
+            <div class="st">Forecast allocation</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div class="seg" id="f-seg"></div>
+              <div style="font-size:11px;color:var(--txt2)">Edit cells · Synced live</div>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--txt2);margin-bottom:10px" id="fc-note"></div>
+          <div class="fc-outer" id="fc-outer"></div>
+        </div>
+      </div>
+
+      <div id="page-timesheets" class="page">
+        <div class="surf">
+          <div class="sh">
+            <div><div class="st">All timesheets</div><div style="font-size:11px;color:var(--txt2);margin-top:2px"><span class="tag tag-a">Actual</span> logged &nbsp;<span class="tag tag-f">Forecast</span> planned</div></div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <input id="ts-s" placeholder="Search member…" style="width:130px" oninput="renderTS()">
+              <select id="ts-w" onchange="renderTS()"><option value="0">This week</option><option value="-1">Last week</option><option value="1">Next week</option></select>
+            </div>
+          </div>
+          <table class="tbl" style="table-layout:fixed">
+            <colgroup><col style="width:90px"><col style="width:90px"><col style="width:38px"><col style="width:38px"><col style="width:38px"><col style="width:38px"><col style="width:38px"><col style="width:52px"><col style="width:52px"><col style="width:52px"></colgroup>
+            <thead><tr><th>Member</th><th>Project</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Actual</th><th>Forecast</th><th>Variance</th></tr></thead>
+            <tbody id="ts-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="page-leave" class="page">
+        <div class="surf"><div class="sh"><div class="st">Leave planner — next 4 weeks</div><div style="font-size:11px;color:var(--txt2)">Click a day to toggle · Reduces available capacity</div></div><div id="lv-cont"></div></div>
+      </div>
+
+      <div id="page-audit" class="page">
+        <div class="surf"><div class="sh"><div class="st">Audit log</div><div style="font-size:11px;color:var(--txt2)" id="audit-cnt"></div></div><div id="audit-list"></div></div>
+      </div>
+
+      <div id="page-projects" class="page">
+        <div class="surf">
+          <div class="sh"><div class="st">Project register</div><div style="display:flex;gap:6px"><input id="ps" placeholder="Search…" style="width:130px" oninput="renderProjects()"><button class="btn bts bta" onclick="openModal('pm')"><i class="ti ti-plus"></i>Add</button></div></div>
+          <table class="tbl" style="table-layout:fixed">
+            <colgroup><col style="width:68px"><col style="width:105px"><col style="width:75px"><col style="width:70px"><col style="width:52px"><col style="width:65px"><col style="width:52px"><col style="width:36px"></colgroup>
+            <thead><tr><th>Code</th><th>Name</th><th>Client</th><th>Discipline</th><th>Status</th><th>End date</th><th>Budget</th><th></th></tr></thead>
+            <tbody id="proj-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="page-team" class="page">
+        <div class="surf">
+          <div class="sh"><div class="st">Team members</div><button class="btn bts bta" onclick="openModal('mm')"><i class="ti ti-plus"></i>Add member</button></div>
+          <table class="tbl" style="table-layout:fixed">
+            <colgroup><col style="width:100px"><col style="width:100px"><col style="width:52px"><col style="width:48px"><col style="width:68px"><col style="width:80px"><col style="width:52px"><col style="width:36px"></colgroup>
+            <thead><tr><th>Member</th><th>Role</th><th>Type</th><th>Cap</th><th>This week</th><th>Utilisation</th><th>Access</th><th></th></tr></thead>
+            <tbody id="team-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><i class="ti ti-check" style="font-size:12px"></i><span id="toast-msg"></span></div>
+
+<!-- Project modal -->
+<div class="modal-wrap" id="pm">
+  <div class="modal">
+    <div class="mh"><div class="mt" id="pm-ttl">Add project</div><button class="btn bts" onclick="closeModal('pm')"><i class="ti ti-x"></i></button></div>
+    <input type="hidden" id="pm-eid">
+    <div class="fr"><div class="fg"><label>Project code</label><input id="p-code" placeholder="SESA-001"></div><div class="fg"><label>Project name</label><input id="p-name" placeholder="SESA HV Design"></div></div>
+    <div class="fr"><div class="fg"><label>Client</label><input id="p-client"></div><div class="fg"><label>Discipline</label><select id="p-disc"><option>Electrical</option><option>Civil</option><option>Structural</option><option>Mechanical</option><option>Project Management</option></select></div></div>
+    <div class="fr"><div class="fg"><label>Start date</label><input type="date" id="p-start"></div><div class="fg"><label>End date</label><input type="date" id="p-end"></div></div>
+    <div class="fr"><div class="fg"><label>Budget (hrs)</label><input type="number" id="p-budget" placeholder="200" min="0"></div><div class="fg"><label>Status</label><select id="p-status"><option>Active</option><option>On Hold</option><option>Completed</option></select></div></div>
+    <div class="fg"><label>Notes / scope</label><textarea id="p-notes" rows="2" placeholder="Brief scope description…"></textarea></div>
+    <div class="br"><button class="btn" onclick="closeModal('pm')">Cancel</button><button class="btn bta" onclick="saveProject()">Save project</button></div>
+  </div>
+</div>
+
+<!-- Member modal -->
+<div class="modal-wrap" id="mm">
+  <div class="modal">
+    <div class="mh"><div class="mt" id="mm-ttl">Add team member</div><button class="btn bts" onclick="closeModal('mm')"><i class="ti ti-x"></i></button></div>
+    <input type="hidden" id="mm-eid">
+    <div class="fr"><div class="fg"><label>Full name</label><input id="m-name"></div><div class="fg"><label>Role</label><input id="m-role"></div></div>
+    <div class="fr"><div class="fg"><label>Weekly capacity (hrs)</label><input type="number" id="m-cap" value="38" min="1" max="80"></div><div class="fg"><label>Employment type</label><select id="m-type"><option>Full time</option><option>Part time</option><option>Contractor</option></select></div></div>
+    <div class="fg"><label>Access level</label><select id="m-admin"><option value="0">Team member</option><option value="1">Admin</option></select></div>
+    <div class="br"><button class="btn" onclick="closeModal('mm')">Cancel</button><button class="btn bta" onclick="saveMember()">Save member</button></div>
+  </div>
+</div>
+
+<!-- Log hours modal -->
+<div class="modal-wrap" id="lm">
+  <div class="modal">
+    <div class="mh"><div class="mt">Log hours</div><button class="btn bts" onclick="closeModal('lm')"><i class="ti ti-x"></i></button></div>
+    <div class="lm-warn" id="lm-warn"></div>
+    <div class="fg"><label>Project</label><select id="l-proj" onchange="checkDuplicate()"></select></div>
+    <div class="fr"><div class="fg"><label>Hours</label><input type="number" id="l-hrs" placeholder="2.5" step="0.5" min="0.5" max="16"></div><div class="fg"><label>Day</label><select id="l-day"><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option></select></div></div>
+    <div class="fg"><label>Notes</label><textarea id="l-notes" rows="2" placeholder="What did you work on?"></textarea></div>
+    <div class="br"><button class="btn" onclick="closeModal('lm')">Cancel</button><button class="btn bta" onclick="saveLog()">Log hours</button></div>
+  </div>
+</div>
+
+<script type="module">
+// ─────────────────────────────────────────────────────────────────────────────
+// Firebase setup
+// ─────────────────────────────────────────────────────────────────────────────
+import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import{getDatabase,ref,set,update,onValue,push,get}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+const FIREBASE_URL='https://resourcetracker-20d6a-default-rtdb.firebaseio.com';
+const CFG_KEY='rt_firebase_url';
+let db,FB_URL;
+
+function setSyncDot(state){
+  const d=document.getElementById('sync-dot');
+  if(!d)return;
+  d.className='sync-dot'+(state==='ok'?' ':state==='err'?' err':' loading');
+}
+
+async function connectFirebase(){
+  const url=(document.getElementById('fb-url').value||'').trim().replace(/\/$/,'');
+  if(!url.startsWith('https://')){showFbErr('Please enter a valid URL starting with https://');return;}
+  document.getElementById('fb-err').classList.remove('show');
+  show('scr-load');
+  setLoadMsg('Testing connection…');
+  try{
+    const app=initializeApp({databaseURL:url},'rt_'+Date.now());
+    const testDb=getDatabase(app);
+    await get(ref(testDb,'ping'));
+    localStorage.setItem(CFG_KEY,url);
+    await boot(url);
+  }catch(e){
+    show('scr-setup');
+    showFbErr('Could not connect — check the URL and make sure test mode is enabled in Firebase');
+  }
+}
+window.connectFirebase=connectFirebase;
+
+function showFbErr(msg){const e=document.getElementById('fb-err');e.textContent=msg;e.classList.add('show');}
+function show(id){['scr-load','scr-setup'].forEach(s=>document.getElementById(s).classList.remove('show'));document.getElementById(id).classList.add('show');}
+function setLoadMsg(m){document.getElementById('load-msg').textContent=m;}
+
+async function boot(url){
+  setLoadMsg('Connecting to database…');
+  try{
+    const app=initializeApp({databaseURL:url});
+    db=getDatabase(app);
+    FB_URL=url;
+    setLoadMsg('Loading data…');
+    await loadAndSubscribe();
+  }catch(e){
+    if(e.code==='app/duplicate-app'){
+      const{getApp}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+      db=getDatabase(getApp());
+      FB_URL=url;
+      await loadAndSubscribe();
+    } else {
+      setLoadMsg('⚠️ Database connection failed — check your internet connection and try again. ('+e.message+')');
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+const AVS=['c0','c1','c2','c3','c4','c5','c6','c7','c8','c9'];
+const DAYS=['Mon','Tue','Wed','Thu','Fri'];
+const PERIODS=[{l:'This week',w:1},{l:'4 weeks',w:4},{l:'3 months',w:13},{l:'6 months',w:26},{l:'Full year',w:52}];
+
+const DEFAULT_TEAM=[
+  {id:1,idx:0,name:'Abdullah',role:'Electrical Engineer',capacity:38,type:'Full time',admin:false},
+  {id:2,idx:1,name:'Anusha',role:'Graduate Engineer',capacity:38,type:'Full time',admin:false},
+  {id:3,idx:2,name:'Amajith',role:'Electrical Engineer',capacity:38,type:'Full time',admin:false},
+  {id:4,idx:3,name:'Ebony',role:'Project Manager',capacity:38,type:'Full time',admin:false},
+  {id:5,idx:4,name:'Eric',role:'Senior Engineer',capacity:38,type:'Full time',admin:false},
+  {id:6,idx:5,name:'Keivan',role:'Electrical Engineer',capacity:38,type:'Full time',admin:false},
+  {id:7,idx:6,name:'Martin',role:'Design Engineer',capacity:38,type:'Full time',admin:false},
+  {id:8,idx:7,name:'Marcus',role:'Graduate Engineer',capacity:38,type:'Full time',admin:false},
+  {id:9,idx:8,name:'Praveen',role:'Principal Engineer',capacity:38,type:'Full time',admin:true},
+  {id:10,idx:9,name:'Thilina',role:'Electrical Engineer',capacity:38,type:'Full time',admin:false}
+];
+const DEFAULT_PROJECTS=[
+  {id:1,code:'SESA-001',name:'SESA HV Design',client:'Ausconnex',discipline:'Electrical',status:'Active',start:'2026-01-01',end:'2026-12-31',budget:400,notes:'HV design scope for SESA'},
+  {id:2,code:'ZEB-002',name:'ZEB Substation',client:'Middleton Group',discipline:'Electrical',status:'Active',start:'2026-02-01',end:'2026-09-30',budget:300,notes:'ZEB substation design'},
+  {id:3,code:'VCRM-003',name:'VCRM Protection',client:'Ausconnex',discipline:'Electrical',status:'Active',start:'2026-03-01',end:'2026-11-30',budget:250,notes:'VCRM protection relay design'},
+  {id:4,code:'ARCH-004',name:'ARCH Civil Works',client:'Internal',discipline:'Civil',status:'Active',start:'2026-01-15',end:'2026-08-31',budget:200,notes:'Civil works coordination'},
+  {id:5,code:'PM-005',name:'Project Management',client:'Various',discipline:'Project Management',status:'Active',start:'2026-01-01',end:'2026-12-31',budget:500,notes:'General project management'}
+];
+
+let S={cu:null,pi:0,team:[],projects:[],alloc:{},logs:{},timers:{},leave:{},audit:[],nMid:11,nPid:6,nLid:1};
+
+function wk(m,p,w){return`${m}_${p}_w${w}`}
+function lk(m,w,d){return`lv_${m}_w${w}_d${d}`}
+function ini(n){return n.split(' ').map(x=>x[0]).join('').toUpperCase().slice(0,2)}
+function avEl(m,c='avs'){return`<div class="av ${c} ${AVS[m.idx%10]}">${ini(m.name)}</div>`}
+function uc(p){return p>100?'ur2':p>=80?'ua':'ug'}
+function pillC(p){return p>100?'pr':p>=80?'pa':'pg'}
+function pillT(p){return p>100?'Over':p>=80?'At capacity':'Available'}
+function rnd1(v){return Math.round(v*10)/10}
+function getMonday(off=0){const d=new Date();const day=d.getDay();d.setDate(d.getDate()-day+(day===0?-6:1)+off*7);d.setHours(0,0,0,0);return d}
+function wkLbl(off){return getMonday(off).toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
+function wkRange(off){const s=getMonday(off);const e=new Date(s);e.setDate(e.getDate()+4);return s.toLocaleDateString('en-AU',{day:'numeric',month:'short'})+' – '+e.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})}
+function tsNow(){return new Date().toLocaleString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+function getForecast(mid,wo){return S.projects.reduce((a,p)=>a+(S.alloc[wk(mid,p.id,wo)]||0),0)}
+function getActualWeek(mid,pid,wo){return Object.values(S.logs[mid]||{}).filter(l=>l.pid===pid&&l.wo===wo).reduce((a,l)=>a+l.hrs,0)}
+function getLvDays(mid,wo){return[0,1,2,3,4].filter(d=>S.leave[lk(mid,wo,d)]).length}
+function getAdjCap(mid,wo){const m=S.team.find(x=>x.id===mid);if(!m)return 0;return Math.round(Math.max(0,m.capacity-getLvDays(mid,wo)*(m.capacity/5)))}
+function getTimerHrs(mid){const t=S.timers[mid];if(!t)return 0;return(t.elapsed+((t.running)?Math.floor((Date.now()-t.startedAt)/1000):0))/3600}
+function getProjLogged(pid){let t=0;Object.values(S.logs).forEach(ul=>Object.values(ul).forEach(l=>{if(l.pid===pid)t+=l.hrs}));return t}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firebase read / write helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function fbSet(path,data){
+  setSyncDot('loading');
+  return set(ref(db,path),data).then(()=>setSyncDot('ok')).catch(e=>{setSyncDot('err');console.error(e);});
+}
+function fbUpdate(path,data){
+  setSyncDot('loading');
+  return update(ref(db,path),data).then(()=>setSyncDot('ok')).catch(e=>{setSyncDot('err');console.error(e);});
+}
+
+async function loadAndSubscribe(){
+  // Check if data exists; if not, seed defaults
+  const snap=await get(ref(db,'meta/seeded'));
+  if(!snap.exists()){
+    setLoadMsg('Seeding default data…');
+    // Build alloc seed
+    const allocSeed={};
+    const seedData=[[1,1,26],[1,2,8],[2,3,20],[3,1,16],[3,4,14],[4,5,28],[5,1,18],[5,2,14],[6,3,24],[7,4,28],[8,2,16],[9,1,8],[9,5,18],[10,3,30]];
+    seedData.forEach(([m,p,h])=>{for(let w=0;w<52;w++){const v=Math.max(0,h+Math.round(Math.sin(w*0.4+m)*3));allocSeed[wk(m,p,w)]=v;}});
+    const teamObj={};DEFAULT_TEAM.forEach(m=>{teamObj[m.id]=m;});
+    const projObj={};DEFAULT_PROJECTS.forEach(p=>{projObj[p.id]=p;});
+    await fbSet('/',{
+      meta:{seeded:true,nMid:11,nPid:6,nLid:1},
+      team:teamObj,
+      projects:projObj,
+      alloc:allocSeed,
+      logs:{},
+      leave:{},
+      audit:{0:{time:tsNow(),user:'System',action:'App initialised',detail:'ResourceTracker seeded with default data'}}
+    });
+  }
+
+  // Subscribe to live updates
+  onValue(ref(db,'team'),(snap)=>{
+    const data=snap.val()||{};
+    S.team=Object.values(data).sort((a,b)=>a.idx-b.idx);
+    refreshUI();
+  });
+  onValue(ref(db,'projects'),(snap)=>{
+    const data=snap.val()||{};
+    S.projects=Object.values(data).sort((a,b)=>a.id-b.id);
+    refreshUI();
+  });
+  onValue(ref(db,'alloc'),(snap)=>{S.alloc=snap.val()||{};refreshUI();});
+  onValue(ref(db,'logs'),(snap)=>{S.logs=snap.val()||{};refreshUI();});
+  onValue(ref(db,'leave'),(snap)=>{S.leave=snap.val()||{};refreshUI();});
+  onValue(ref(db,'audit'),(snap)=>{
+    const data=snap.val()||{};
+    S.audit=Object.values(data).sort((a,b)=>b._t-(a._t||0));
+    renderAuditIfActive();
+  });
+  onValue(ref(db,'meta'),(snap)=>{
+    const m=snap.val()||{};
+    S.nMid=m.nMid||11;S.nPid=m.nPid||6;S.nLid=m.nLid||1;
+    setSyncDot('ok');
+  });
+
+  setLoadMsg('Starting app…');
+  setTimeout(()=>{
+    document.getElementById('scr-load').classList.remove('show');
+    document.getElementById('shell').style.display='flex';
+    initApp();
+  },600);
+}
+
+function refreshUI(){
+  if(!S.cu)return;
+  const activePage=document.querySelector('.page.active');
+  if(!activePage)return;
+  const id=activePage.id.replace('page-','');
+  const map={dashboard:renderDash,today:renderToday,forecast:renderForecast,timesheets:renderTS,leave:renderLeave,projects:renderProjects,team:renderTeamPage};
+  if(map[id])map[id]();
+  buildSwitcher();
+}
+function renderAuditIfActive(){
+  if(document.getElementById('page-audit').classList.contains('active'))renderAudit();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit
+// ─────────────────────────────────────────────────────────────────────────────
+function addAudit(action,detail){
+  const entry={time:tsNow(),user:S.cu?.name||'System',action,detail,_t:Date.now()};
+  const newRef=push(ref(db,'audit'));
+  set(newRef,entry);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI helpers
+// ─────────────────────────────────────────────────────────────────────────────
+let sbOpen=true;
+function toggleSB(){sbOpen=!sbOpen;document.getElementById('sb').classList.toggle('col',!sbOpen);}
+window.toggleSB=toggleSB;
+
+let swOpen=false;
+function toggleSwitcher(){swOpen=!swOpen;document.getElementById('sw-wrap').classList.toggle('open',swOpen);}
+function closeSwitcher(){swOpen=false;document.getElementById('sw-wrap').classList.remove('open');}
+window.toggleSwitcher=toggleSwitcher;
+document.addEventListener('click',e=>{if(swOpen&&!e.target.closest('.sb-foot'))closeSwitcher();});
+
+function buildSwitcher(){
+  document.getElementById('sw-wrap').innerHTML=S.team.map(m=>`<div class="sw-item${S.cu?.id===m.id?' active':''}" onclick="switchUser(${m.id})"><div class="av avs ${AVS[m.idx%10]}">${ini(m.name)}</div><div><div class="sw-nm">${m.name}${m.admin?' <span style="font-size:9px;color:var(--acc)">Admin</span>':''}</div><div class="sw-rl">${m.role}</div></div></div>`).join('');
+}
+
+let kbFn=null;
+function initApp(){
+  const m=S.team.find(x=>x.admin)||S.team[0];
+  if(!m)return;
+  S.cu=m;
+  applyUser(m);
+  document.getElementById('tb-date').textContent=new Date().toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
+  buildSwitcher();
+  buildSegments();
+  setPeriod(0);
+  renderToday();
+  attachKb();
+}
+
+function applyUser(m){
+  const av=document.getElementById('sb-av');
+  av.className=`av avm ${AVS[m.idx%10]}`;
+  av.textContent=ini(m.name);
+  document.getElementById('sb-nm').textContent=m.name;
+  document.getElementById('sb-rl').textContent=m.role+(m.admin?' · Admin':'');
+  document.getElementById('adm-nav').style.display=m.admin?'block':'none';
+}
+
+function switchUser(id){
+  closeSwitcher();
+  if(S.cu?.id===id)return;
+  const t=S.timers[S.cu?.id];
+  if(t?.running)pauseTimer(t.pid);
+  S.cu=S.team.find(m=>m.id===id);
+  applyUser(S.cu);
+  addAudit('User switched',S.cu.name+' is now active');
+  buildSwitcher();
+  buildSegments();
+  setPeriod(0);
+  renderToday();
+}
+window.switchUser=switchUser;
+
+function nav(page,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  if(btn)btn.classList.add('active');
+  const T={dashboard:'Dashboard',today:'Today',forecast:'Forecast',timesheets:'All timesheets',leave:'Leave planner',audit:'Audit log',projects:'Project register',team:'Team'};
+  document.getElementById('pg-title').textContent=T[page]||page;
+  const R={today:renderToday,forecast:renderForecast,timesheets:renderTS,leave:renderLeave,audit:renderAudit,projects:renderProjects,team:renderTeamPage,dashboard:renderDash};
+  if(R[page])R[page]();
+}
+window.nav=nav;
+
+function buildSegments(){
+  const html=PERIODS.map((p,i)=>`<button class="sg${i===0?' active':''}" onclick="setPeriod(${i})">${p.l}</button>`).join('');
+  document.getElementById('d-seg').innerHTML=html;
+  document.getElementById('f-seg').innerHTML=html;
+}
+
+function setPeriod(idx){
+  S.pi=idx;
+  document.querySelectorAll('#d-seg .sg,#f-seg .sg').forEach((b,i)=>{b.classList.toggle('active',(i%PERIODS.length)===idx)});
+  const p=PERIODS[idx];
+  document.getElementById('d-lbl').textContent=p.l+' · '+wkLbl(0)+' – '+wkLbl(p.w-1);
+  document.getElementById('fc-note').textContent=`${p.w} week${p.w>1?'s':''} · ${wkRange(0)}${p.w>1?' → '+wkRange(p.w-1):''} · Dates advance automatically each Monday`;
+  renderDash();
+  if(document.getElementById('page-forecast').classList.contains('active'))renderForecast();
+}
+window.setPeriod=setPeriod;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Render functions
+// ─────────────────────────────────────────────────────────────────────────────
+function renderDash(){
+  const nw=PERIODS[S.pi].w;
+  let tCap=0,tAlloc=0,tAdj=0;
+  S.team.forEach(m=>{for(let w=0;w<nw;w++){tAlloc+=getForecast(m.id,w);tCap+=m.capacity;tAdj+=getAdjCap(m.id,w);}});
+  const util=tAdj>0?Math.round(tAlloc/tAdj*100):0;
+  document.getElementById('dm').innerHTML=`<div class="mc"><div class="mc-lbl">Team capacity</div><div class="mc-val">${Math.round(tCap/nw)}</div><div class="mc-sub">hrs/week · ${S.team.length} members</div></div><div class="mc"><div class="mc-lbl">Avg forecast</div><div class="mc-val">${Math.round(tAlloc/nw)}</div><div class="mc-sub">hrs/week over ${nw}wk${nw>1?'s':''}</div></div><div class="mc"><div class="mc-lbl">Utilisation</div><div class="mc-val">${util}%</div><div class="mc-sub">leave-adjusted</div></div><div class="mc"><div class="mc-lbl">Active projects</div><div class="mc-val">${S.projects.filter(p=>p.status==='Active').length}</div><div class="mc-sub">${[...new Set(S.projects.filter(p=>p.status==='Active').map(p=>p.discipline))].length} disciplines</div></div>`;
+  const maxH=Math.max(...S.team.map(m=>getForecast(m.id,0)),1);
+  document.getElementById('util-ch').innerHTML=`<div class="bc">${S.team.map(m=>{const h=getForecast(m.id,0);const cap=getAdjCap(m.id,0);const pct=cap>0?Math.round(h/cap*100):0;const bh=Math.round((h/maxH)*100);const col=pct>100?'#E24B4A':pct>=80?'#EF9F27':'#639922';return`<div class="bc-col"><div class="bc-in"><div class="bc-val">${pct}%</div><div class="bc-fill" style="height:${bh}%;background:${col}"></div></div><div class="bc-lbl">${m.name.split(' ')[0]}</div></div>`;}).join('')}</div>`;
+  document.getElementById('d-tbody').innerHTML=S.team.map(m=>{let alloc=0;for(let w=0;w<nw;w++)alloc+=getForecast(m.id,w);const avgA=Math.round(alloc/nw);const adjCap=getAdjCap(m.id,0);const pct=adjCap>0?Math.round(avgA/adjCap*100):0;const nxtW=getForecast(m.id,1);const variance=avgA-nxtW;const vHtml=variance===0?'<span style="color:var(--txt2)">—</span>':variance>0?`<span class="vp">+${variance}h</span>`:`<span class="vn">${variance}h</span>`;const lv=getLvDays(m.id,0);return`<tr><td><div style="display:flex;align-items:center;gap:6px">${avEl(m,'avs')}<span>${m.name}</span>${lv>0?`<span class="pill pgr" style="font-size:9px">${lv}d lv</span>`:''}</div></td><td>${avgA}h</td><td>${adjCap}h</td><td><div style="display:flex;align-items:center;gap:5px"><div class="ubar"><div class="uf ${uc(pct)}" style="width:${Math.min(pct,100)}%"></div></div>${pct}%</div></td><td>${vHtml}</td><td><span class="pill ${pillC(pct)}">${pillT(pct)}</span></td></tr>`;}).join('');
+  document.getElementById('burn-tbody').innerHTML=S.projects.filter(p=>p.status==='Active').map(p=>{const logged=rnd1(getProjLogged(p.id));const budget=p.budget||1;const bp=Math.min(Math.round(logged/budget*100),100);return`<tr><td style="font-weight:500">${p.name}</td><td><span class="pill pg">Active</span></td><td>${logged}h <span class="tag tag-a">actual</span></td><td>${budget}h</td><td><div class="bb"><div class="bb-f" style="width:${bp}%"></div></div></td><td style="font-size:11px;color:var(--txt2)">${bp}%</td></tr>`;}).join('');
+  const gapW=Math.min(nw,12);
+  document.getElementById('gap-ttl').textContent=`Capacity gaps — ${PERIODS[S.pi].l}`;
+  let gh=`<div style="overflow-x:auto"><table class="tbl" style="table-layout:fixed;width:max-content;min-width:100%"><thead><tr><th style="width:120px">Member</th>`;
+  for(let w=0;w<gapW;w++)gh+=`<th style="width:${Math.max(46,Math.floor(350/gapW))}px;text-align:center;font-size:10px">Wk${w+1}<br><span style="font-weight:400">${wkLbl(w)}</span></th>`;
+  gh+=`</tr></thead><tbody>`;
+  S.team.forEach(m=>{gh+=`<tr><td><div style="display:flex;align-items:center;gap:5px">${avEl(m,'avs')}${m.name}</div></td>`;for(let w=0;w<gapW;w++){const h=getForecast(m.id,w);const cap=getAdjCap(m.id,w);const avail=Math.round(cap-h);const bg=avail<=0?'#FCEBEB':avail<8?'#FAEEDA':'transparent';gh+=`<td style="text-align:center;background:${bg};border-radius:3px;font-size:11px">${avail>0?'+'+avail:'Full'}</td>`;}gh+=`</tr>`;});
+  document.getElementById('gap-cont').innerHTML=gh+`</tbody></table></div>`;
+}
+window.renderDash=renderDash;
+
+function renderForecast(){
+  const nw=PERIODS[S.pi].w;
+  const cw=Math.max(58,Math.floor(400/Math.min(nw,8)));
+  let html=`<table class="fc-tbl"><thead><tr><th class="nc">Member / Project</th>`;
+  for(let w=0;w<nw;w++)html+=`<th style="min-width:${cw}px">Wk${w+1}<br><span style="font-weight:400;font-size:10px">${wkLbl(w)}</span></th>`;
+  html+=`</tr></thead><tbody>`;
+  S.team.forEach(m=>{
+    const sums=Array.from({length:nw},(_,w)=>{const h=getForecast(m.id,w);const cap=getAdjCap(m.id,w);const pct=cap>0?Math.round(h/cap*100):0;const lv=getLvDays(m.id,w);const col=pct>100?'#A32D2D':pct>=80?'#854F0B':'var(--txt2)';return`<td class="fc-sum" style="color:${col};background:var(--surf2)">${h}h · ${pct}%${lv>0?` · ${lv}lv`:''}</td>`;}).join('');
+    html+=`<tr class="mr"><td class="nc"><div style="display:flex;align-items:center;gap:6px">${avEl(m,'avs')}<span>${m.name}</span></div></td>${sums}</tr>`;
+    S.projects.filter(p=>p.status==='Active').forEach(p=>{
+      const cells=Array.from({length:nw},(_,w)=>{const k=wk(m.id,p.id,w);const v=S.alloc[k]||0;return`<td style="text-align:center"><input class="fc-inp" type="number" min="0" max="${m.capacity}" value="${v}" step="1" onchange="updateAlloc(${m.id},${p.id},${w},this.value)"></td>`;}).join('');
+      html+=`<tr><td class="nc" style="padding-left:20px;color:var(--txt2)">${p.name}</td>${cells}</tr>`;
+    });
+  });
+  html+=`</tbody></table>`;
+  document.getElementById('fc-outer').innerHTML=html;
+}
+
+function updateAlloc(mid,pid,w,val){
+  const v=Math.max(0,parseInt(val)||0);
+  S.alloc[wk(mid,pid,w)]=v;
+  fbUpdate('alloc',{[wk(mid,pid,w)]:v});
+  addAudit('Forecast updated',`${S.team.find(x=>x.id===mid)?.name} — ${S.projects.find(x=>x.id===pid)?.name} wk${w+1}: ${v}h`);
+  renderDash();
+}
+window.updateAlloc=updateAlloc;
+
+function renderToday(){
+  if(!S.cu)return;
+  const mid=S.cu.id;
+  const logHrs=Object.values(S.logs[mid]||{}).reduce((a,l)=>a+l.hrs,0);
+  const timerHrs=getTimerHrs(mid);
+  const total=logHrs+timerHrs;
+  const cap=rnd1(S.cu.capacity/5);
+  const t=S.timers[mid];
+  const activeP=t?.running?S.projects.find(p=>p.id===t.pid)?.name||'None':'None';
+  document.getElementById('tm').innerHTML=`<div class="mc"><div class="mc-lbl">Logged today <span class="tag tag-a">actual</span></div><div class="mc-val">${rnd1(total)}</div><div class="mc-sub">hours</div></div><div class="mc"><div class="mc-lbl">Active timer</div><div class="mc-val" style="font-size:12px;padding-top:5px;line-height:1.4">${activeP}</div></div><div class="mc"><div class="mc-lbl">Remaining today</div><div class="mc-val">${rnd1(Math.max(0,cap-total))}</div><div class="mc-sub">of ${cap}h daily target</div></div><div class="mc"><div class="mc-lbl">Week forecast <span class="tag tag-f">planned</span></div><div class="mc-val">${getForecast(mid,0)}</div><div class="mc-sub">hrs allocated wk1</div></div>`;
+  const active=S.projects.filter(p=>p.status==='Active');
+  document.getElementById('timer-list').innerHTML=active.length?active.map(p=>{const tmr=S.timers[mid];const isThis=tmr?.pid===p.id;const running=isThis&&tmr.running;const secs=isThis?(tmr.elapsed+(running?Math.floor((Date.now()-tmr.startedAt)/1000):0)):0;const h=Math.floor(secs/3600),m2=Math.floor((secs%3600)/60),s=secs%60;const tstr=`${String(h).padStart(2,'0')}:${String(m2).padStart(2,'0')}:${String(s).padStart(2,'0')}`;return`<div class="tr-row"><div class="tr-info"><div class="tr-proj">${p.name}</div><div class="tr-code">${p.code} · ${p.client}</div></div><div class="tr-time" id="td-${mid}-${p.id}">${tstr}</div><div class="tr-acts">${running?`<button class="ib run" onclick="pauseTimer(${p.id})"><i class="ti ti-player-pause"></i></button>`:`<button class="ib" onclick="startTimer(${p.id})"><i class="ti ti-player-play"></i></button>`}<button class="ib" onclick="stopTimer(${p.id})"><i class="ti ti-square"></i></button><button class="ib" onclick="openLogModal(${p.id})"><i class="ti ti-edit"></i></button></div></div>`;}).join(''):'<div class="es">No active projects</div>';
+  const logs=S.logs[mid]||{};
+  const byProj={};
+  Object.values(logs).forEach(l=>{if(!byProj[l.pid])byProj[l.pid]={manual:0,day:l.day,note:l.note};byProj[l.pid].manual+=l.hrs;});
+  const rows=S.projects.filter(p=>p.status==='Active').map(p=>{const tmr=S.timers[mid];const tHrs=tmr?.pid===p.id?rnd1(getTimerHrs(mid)):0;const mHrs=rnd1(byProj[p.id]?.manual||0);const total2=rnd1(tHrs+mHrs);if(total2===0)return'';const day=byProj[p.id]?.day;const note=byProj[p.id]?.note||'';return`<tr><td style="font-weight:500">${p.name}</td><td style="color:var(--txt2)">${p.code}</td><td>${tHrs>0?tHrs+'h':'—'}</td><td>${mHrs>0?mHrs+'h':'—'}</td><td style="font-weight:500">${total2}h</td><td>${day!==undefined?DAYS[day]:'—'}</td><td style="color:var(--txt2);font-size:11px">${note||'—'}</td><td>${mHrs>0?`<button class="ib" style="width:22px;height:22px;font-size:11px" onclick="deleteLog(${p.id})"><i class="ti ti-trash"></i></button>`:'—'}</td></tr>`;}).filter(Boolean).join('');
+  document.getElementById('today-tbody').innerHTML=rows||`<tr><td colspan="8" class="es">No hours logged yet — start a timer or log manually</td></tr>`;
+}
+
+function renderTS(){
+  const q=(document.getElementById('ts-s')?.value||'').toLowerCase();
+  const wo=parseInt(document.getElementById('ts-w')?.value||'0');
+  const members=S.team.filter(m=>m.name.toLowerCase().includes(q));
+  let rows='';
+  members.forEach(m=>{S.projects.filter(p=>p.status==='Active').forEach(p=>{const forecast=S.alloc[wk(m.id,p.id,wo)]||0;const actualTotal=getActualWeek(m.id,p.id,wo);const dailyActual=DAYS.map((_,d)=>Object.values(S.logs[m.id]||{}).filter(l=>l.pid===p.id&&l.wo===wo&&l.day===d).reduce((a,l)=>a+l.hrs,0));if(actualTotal===0&&forecast===0)return;const variance=rnd1(actualTotal-forecast);const isMe=m.id===S.cu?.id;rows+=`<tr${isMe?' style="background:var(--acc-l)"':''}><td><div style="display:flex;align-items:center;gap:5px">${avEl(m,'avs')}${m.name}${isMe?'<span class="pill pb" style="font-size:9px">me</span>':''}</div></td><td style="overflow:hidden;text-overflow:ellipsis">${p.name}</td>${dailyActual.map(v=>`<td style="text-align:center">${v>0?v:'—'}</td>`).join('')}<td style="text-align:center;font-weight:500"><span class="tag tag-a">${rnd1(actualTotal)||'—'}</span></td><td style="text-align:center"><span class="tag tag-f">${forecast}</span></td><td style="text-align:center">${variance===0?'—':variance>0?`<span class="vp">+${variance}</span>`:`<span class="vn">${variance}</span>`}</td></tr>`;});});
+  document.getElementById('ts-tbody').innerHTML=rows||`<tr><td colspan="10" class="es">No timesheet data</td></tr>`;
+}
+
+function renderLeave(){
+  const D=['M','T','W','T','F'];
+  let html=`<div style="display:grid;grid-template-columns:120px repeat(20,1fr);gap:2px;align-items:center;margin-bottom:6px"><div></div>`;
+  for(let w=0;w<4;w++)D.forEach((d,di)=>{html+=`<div style="text-align:center;font-size:9px;color:var(--txt2)">${di===0?`<div style="font-size:9px;font-weight:500;margin-bottom:1px">W${w+1} ${wkLbl(w)}</div>`:''}${d}</div>`;});
+  html+=`</div>`;
+  S.team.forEach(m=>{html+=`<div style="display:grid;grid-template-columns:120px repeat(20,1fr);gap:2px;align-items:center;margin-bottom:3px"><div style="display:flex;align-items:center;gap:5px;font-size:11px;overflow:hidden">${avEl(m,'avs')}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.name.split(' ')[0]}</span></div>`;for(let w=0;w<4;w++)for(let d=0;d<5;d++){const k=lk(m.id,w,d);const on=S.leave[k];html+=`<div class="lv-cell${on?' lv':''}" onclick="toggleLeave(${m.id},${w},${d})">${on?'L':''}</div>`;}html+=`</div>`;});
+  document.getElementById('lv-cont').innerHTML=html;
+}
+
+function renderAudit(){
+  document.getElementById('audit-cnt').textContent=S.audit.length+' entries';
+  document.getElementById('audit-list').innerHTML=S.audit.length?S.audit.map(a=>`<div class="ar"><div style="display:flex;justify-content:space-between"><span style="font-weight:500">${a.action}</span><span style="color:var(--txt3);font-size:10px">${a.time}</span></div><div style="color:var(--txt2);margin-top:2px">${a.detail} <span style="color:var(--txt3)">· ${a.user}</span></div></div>`).join(''):`<div class="es">No audit entries yet</div>`;
+}
+
+function renderProjects(){
+  const q=(document.getElementById('ps')?.value||'').toLowerCase();
+  const filtered=S.projects.filter(p=>p.name.toLowerCase().includes(q)||p.code.toLowerCase().includes(q)||(p.client||'').toLowerCase().includes(q));
+  document.getElementById('proj-tbody').innerHTML=filtered.map(p=>{const sc=p.status==='Active'?'pg':p.status==='On Hold'?'pa':'pgr';const endDt=p.end?new Date(p.end):null;const endStr=endDt?endDt.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'2-digit'}):'—';const near=endDt&&(endDt-new Date())<30*24*3600*1000&&p.status==='Active';return`<tr><td style="font-family:monospace;font-size:10px">${p.code}</td><td style="font-weight:500">${p.name}</td><td style="color:var(--txt2)">${p.client}</td><td><span class="pill pb">${p.discipline}</span></td><td><span class="pill ${sc}">${p.status}</span></td><td style="color:${near?'#A32D2D':'inherit'}">${endStr}</td><td>${p.budget||'—'}h</td><td><button class="ib" style="width:22px;height:22px;font-size:11px" onclick="editProj(${p.id})"><i class="ti ti-edit"></i></button></td></tr>`;}).join('');
+}
+
+function renderTeamPage(){
+  document.getElementById('team-tbody').innerHTML=S.team.map(m=>{const h=getForecast(m.id,0);const cap=getAdjCap(m.id,0);const pct=cap>0?Math.round(h/cap*100):0;return`<tr><td><div style="display:flex;align-items:center;gap:6px">${avEl(m,'avs')}${m.name}</div></td><td style="color:var(--txt2)">${m.role}</td><td>${m.type.split(' ')[0]}</td><td>${m.capacity}h</td><td>${h}h</td><td><div style="display:flex;align-items:center;gap:5px"><div class="ubar"><div class="uf ${uc(pct)}" style="width:${Math.min(pct,100)}%"></div></div>${pct}%</div></td><td><span class="pill ${m.admin?'pb':'pgr'}">${m.admin?'Admin':'Member'}</span></td><td><button class="ib" style="width:22px;height:22px;font-size:11px" onclick="editMember(${m.id})"><i class="ti ti-edit"></i></button></td></tr>`;}).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Timers
+// ─────────────────────────────────────────────────────────────────────────────
+let tickInt=null,nfShown={};
+function startTimer(pid){
+  const me=S.cu;if(!me)return;
+  const existing=S.timers[me.id];
+  if(existing?.running){pauseTimer(existing.pid);showToast('Paused: '+(S.projects.find(p=>p.id===existing.pid)?.name||''));}
+  if(!S.timers[me.id]||S.timers[me.id].pid!==pid)S.timers[me.id]={mid:me.id,pid,elapsed:0,running:false};
+  S.timers[me.id].running=true;S.timers[me.id].startedAt=Date.now();
+  nfShown[`${me.id}_${pid}`]=false;
+  addAudit('Timer started',me.name+' started on '+(S.projects.find(x=>x.id===pid)?.name||''));
+  startTick();renderToday();
+}
+window.startTimer=startTimer;
+
+function pauseTimer(pid){
+  const me=S.cu;if(!me)return;
+  const t=S.timers[me.id];if(!t?.running||t.pid!==pid)return;
+  t.elapsed+=Math.floor((Date.now()-t.startedAt)/1000);t.running=false;
+  addAudit('Timer paused',me.name+' paused on '+(S.projects.find(x=>x.id===pid)?.name||''));renderToday();
+}
+window.pauseTimer=pauseTimer;
+
+function stopTimer(pid){
+  const me=S.cu;if(!me)return;
+  if(S.timers[me.id]?.running&&S.timers[me.id].pid===pid)pauseTimer(pid);
+  const t=S.timers[me.id];
+  if(t?.pid===pid&&t.elapsed>0){
+    const hrs=rnd1(t.elapsed/3600);
+    const lid='log_'+Date.now();
+    if(!S.logs[me.id])S.logs[me.id]={};
+    const entry={id:lid,pid,hrs,wo:0,day:Math.max(0,new Date().getDay()-1),note:'Timer session',type:'timer'};
+    S.logs[me.id][lid]=entry;
+    fbSet(`logs/${me.id}/${lid}`,entry);
+    const p=S.projects.find(x=>x.id===pid);
+    addAudit('Timer stopped',me.name+' logged '+hrs+'h on '+(p?.name||''));
+    showToast(hrs+'h logged to '+(p?.name||''));
+  }
+  delete S.timers[me.id];renderToday();
+}
+window.stopTimer=stopTimer;
+
+function stopActiveTimer(){const t=S.timers[S.cu?.id];if(t?.running)stopTimer(t.pid);dismissNotif();}
+window.stopActiveTimer=stopActiveTimer;
+function continueTimer(){const t=S.timers[S.cu?.id];if(t)nfShown[`${S.cu.id}_${t.pid}`]=true;dismissNotif();}
+window.continueTimer=continueTimer;
+function dismissNotif(){document.getElementById('notif').classList.remove('show');}
+window.dismissNotif=dismissNotif;
+function showNotif(pname){document.getElementById('notif-ttl').textContent='1 hour on '+pname;document.getElementById('notif-msg').textContent="You've been working on this project for an hour.";document.getElementById('notif').classList.add('show');}
+
+function startTick(){
+  if(tickInt)return;
+  tickInt=setInterval(()=>{
+    const me=S.cu;if(!me){clearInterval(tickInt);tickInt=null;return;}
+    const t=S.timers[me.id];if(!t?.running){clearInterval(tickInt);tickInt=null;return;}
+    const secs=t.elapsed+Math.floor((Date.now()-t.startedAt)/1000);
+    const el=document.getElementById(`td-${me.id}-${t.pid}`);
+    if(el){const h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60;el.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;}
+    const nk=`${me.id}_${t.pid}`;
+    if(secs>=3600&&!nfShown[nk]){nfShown[nk]=true;showNotif(S.projects.find(x=>x.id===t.pid)?.name||'project');}
+  },1000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Log hours
+// ─────────────────────────────────────────────────────────────────────────────
+function openLogModal(pid){
+  const sel=document.getElementById('l-proj');
+  sel.innerHTML=S.projects.filter(p=>p.status==='Active').map(p=>`<option value="${p.id}"${p.id===pid?' selected':''}>${p.name} (${p.code})</option>`).join('');
+  document.getElementById('lm-warn').style.display='none';
+  checkDuplicate();openModal('lm');
+}
+window.openLogModal=openLogModal;
+
+function checkDuplicate(){
+  const me=S.cu;if(!me)return;
+  const pid=parseInt(document.getElementById('l-proj')?.value);
+  const warn=document.getElementById('lm-warn');
+  const t=S.timers[me.id];
+  const hasTimer=t?.pid===pid&&t.elapsed>0;
+  const hasManual=Object.values(S.logs[me.id]||{}).some(l=>l.pid===pid);
+  if(hasTimer||hasManual){warn.style.display='block';warn.textContent=(hasTimer?'A timer session exists. ':'')+(hasManual?'Manual hours already logged. ')+'Adding more will accumulate.';}
+  else{warn.style.display='none';}
+}
+window.checkDuplicate=checkDuplicate;
+
+function deleteLog(pid){
+  const me=S.cu;if(!me)return;
+  if(!confirm('Delete all manual log entries for this project today?'))return;
+  const logs=S.logs[me.id]||{};
+  Object.keys(logs).forEach(lid=>{if(logs[lid].pid===pid){delete logs[lid];fbSet(`logs/${me.id}/${lid}`,null);}});
+  showToast('Log entries deleted');renderToday();
+}
+window.deleteLog=deleteLog;
+
+function saveLog(){
+  const me=S.cu;if(!me)return;
+  const pid=parseInt(document.getElementById('l-proj').value);
+  const hrs=parseFloat(document.getElementById('l-hrs').value);
+  const day=parseInt(document.getElementById('l-day').value);
+  const note=document.getElementById('l-notes').value;
+  if(!pid||!hrs||hrs<=0){alert('Select a project and enter valid hours');return;}
+  if(!S.logs[me.id])S.logs[me.id]={};
+  const lid='log_'+Date.now();
+  const entry={id:lid,pid,hrs,wo:0,day,note,type:'manual'};
+  S.logs[me.id][lid]=entry;
+  fbSet(`logs/${me.id}/${lid}`,entry);
+  addAudit('Hours logged',me.name+' logged '+hrs+'h on '+(S.projects.find(x=>x.id===pid)?.name||''));
+  showToast(hrs+'h logged');closeModal('lm');
+  document.getElementById('l-hrs').value='';document.getElementById('l-notes').value='';
+  renderToday();renderTS();
+}
+window.saveLog=saveLog;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Leave
+// ─────────────────────────────────────────────────────────────────────────────
+function toggleLeave(mid,w,d){
+  const k=lk(mid,w,d);
+  S.leave[k]=!S.leave[k];
+  fbUpdate('leave',{[k]:S.leave[k]});
+  addAudit('Leave toggled',`${S.team.find(x=>x.id===mid)?.name} wk${w+1} ${DAYS[d]}: ${S.leave[k]?'set':'removed'}`);
+  renderLeave();renderDash();
+}
+window.toggleLeave=toggleLeave;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Projects
+// ─────────────────────────────────────────────────────────────────────────────
+function editProj(id){
+  const p=S.projects.find(x=>x.id===id);if(!p)return;
+  document.getElementById('pm-ttl').textContent='Edit project';
+  document.getElementById('pm-eid').value=id;
+  document.getElementById('p-code').value=p.code;
+  document.getElementById('p-name').value=p.name;
+  document.getElementById('p-client').value=p.client;
+  document.getElementById('p-disc').value=p.discipline;
+  document.getElementById('p-start').value=p.start||'';
+  document.getElementById('p-end').value=p.end||'';
+  document.getElementById('p-budget').value=p.budget||'';
+  document.getElementById('p-status').value=p.status;
+  document.getElementById('p-notes').value=p.notes||'';
+  openModal('pm');
+}
+window.editProj=editProj;
+
+function saveProject(){
+  const code=document.getElementById('p-code').value.trim();
+  const name=document.getElementById('p-name').value.trim();
+  if(!code||!name){alert('Code and name required');return;}
+  const eid=parseInt(document.getElementById('pm-eid').value)||0;
+  const data={code,name,client:document.getElementById('p-client').value.trim(),discipline:document.getElementById('p-disc').value,status:document.getElementById('p-status').value,start:document.getElementById('p-start').value,end:document.getElementById('p-end').value,budget:parseInt(document.getElementById('p-budget').value)||0,notes:document.getElementById('p-notes').value.trim()};
+  if(eid){
+    const existing=S.projects.find(p=>p.id===eid);
+    fbSet(`projects/${eid}`,{...existing,...data,id:eid});
+    addAudit('Project updated',name+' updated');
+  } else {
+    const newId=S.nPid++;
+    fbSet(`projects/${newId}`,{...data,id:newId});
+    fbUpdate('meta',{nPid:S.nPid});
+    addAudit('Project added',name+' added');
+  }
+  showToast(eid?'Project updated':'Project added');
+  closeModal('pm');
+  document.getElementById('pm-ttl').textContent='Add project';
+  document.getElementById('pm-eid').value='';
+  ['p-code','p-name','p-client','p-start','p-end','p-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('p-budget').value='';
+}
+window.saveProject=saveProject;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Team members
+// ─────────────────────────────────────────────────────────────────────────────
+function editMember(id){
+  const m=S.team.find(x=>x.id===id);if(!m)return;
+  document.getElementById('mm-ttl').textContent='Edit member';
+  document.getElementById('mm-eid').value=id;
+  document.getElementById('m-name').value=m.name;
+  document.getElementById('m-role').value=m.role;
+  document.getElementById('m-cap').value=m.capacity;
+  document.getElementById('m-type').value=m.type;
+  document.getElementById('m-admin').value=m.admin?'1':'0';
+  openModal('mm');
+}
+window.editMember=editMember;
+
+function saveMember(){
+  const name=document.getElementById('m-name').value.trim();
+  if(!name){alert('Name required');return;}
+  const eid=parseInt(document.getElementById('mm-eid').value)||0;
+  const data={name,role:document.getElementById('m-role').value.trim(),capacity:parseInt(document.getElementById('m-cap').value)||38,type:document.getElementById('m-type').value,admin:document.getElementById('m-admin').value==='1'};
+  if(eid){
+    const existing=S.team.find(m=>m.id===eid);
+    fbSet(`team/${eid}`,{...existing,...data,id:eid});
+    addAudit('Member updated',name+' updated');
+  } else {
+    const newId=S.nMid++;
+    fbSet(`team/${newId}`,{...data,id:newId,idx:newId-1});
+    fbUpdate('meta',{nMid:S.nMid});
+    addAudit('Member added',name+' added');
+  }
+  showToast(eid?'Member updated':'Member added');
+  closeModal('mm');
+  document.getElementById('mm-ttl').textContent='Add team member';
+  document.getElementById('mm-eid').value='';
+  ['m-name','m-role'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('m-cap').value=38;
+}
+window.saveMember=saveMember;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modals / toast / keyboard
+// ─────────────────────────────────────────────────────────────────────────────
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+window.openModal=openModal;window.closeModal=closeModal;
+document.querySelectorAll('.modal-wrap').forEach(w=>{w.addEventListener('click',e=>{if(e.target===w)w.classList.remove('open');});});
+
+let toastT=null;
+function showToast(msg){document.getElementById('toast-msg').textContent=msg;document.getElementById('toast').classList.add('show');if(toastT)clearTimeout(toastT);toastT=setTimeout(()=>document.getElementById('toast').classList.remove('show'),2500);}
+
+function attachKb(){
+  document.addEventListener('keydown',e=>{
+    if(e.code==='Space'&&e.target.tagName!=='INPUT'&&e.target.tagName!=='TEXTAREA'){
+      e.preventDefault();
+      const t=S.timers[S.cu?.id];
+      if(t?.running)pauseTimer(t.pid);
+      else{const f=S.projects.find(p=>p.status==='Active');if(f)startTimer(f.id);}
+      renderToday();
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Start
+// ─────────────────────────────────────────────────────────────────────────────
+(function start(){
+  boot(FIREBASE_URL);
+})();
+</script>
+</body>
+</html>
